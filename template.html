@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="darkreader-lock"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <link rel="manifest" href='data:application/manifest+json,{"display":"standalone"}' />
+  <meta name="mobile-web-app-capable" content="yes" />
+
+  <title>Neural Romance v2</title>
+  <meta name="description" content="Calculate your chances of finding love">
+
+  <link rel="icon" href="romance.png" type="image/png">
+  <link rel="shortcut icon" href="romance.png" type="image/png">
+  <link rel="apple-touch-icon" href="romance.png">
+
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="https://colinrizzman.github.io/romance.png">
+  <meta property="og:title" content="Calculate your chances of finding love">
+  <meta property="og:description" content="A neural network calculates your chance of finding love.">
+  <meta property="og:site_name" content="Neural Romance">
+  <meta property="og:url" content="https://colinrizzman.github.io/romance">
+
+  <meta name="twitter:title" content="Calculate your chances of finding love">
+  <meta name="twitter:description" content="A neural network calculates your chance of finding love.">
+  <meta name="twitter:image" content="https://colinrizzman.github.io/romance.png">
+
+  <meta itemprop="name" content="Calculate your chances of finding love">
+  <meta itemprop="description" content="A neural network calculates your chance of finding love.">
+  <meta itemprop="image" content="https://colinrizzman.github.io/romance.png">
+
+  <meta name="theme-color" content="#5cc8ff">
+
+  <style>
+    :root {
+      --bg:#0b0f14;
+      --panel:#1a2430;
+      --text:#5cc8ff;
+      --muted:#9fb0c4;
+      --accent:#5cc8ff;
+      --accent-2:#7cf29c;
+      --border:#223042;
+      --radius:14px;
+    }
+    a { color: #5cc8ff; }
+    * { box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      background: radial-gradient(1200px 800px at 10% 0%, #0d1420, #0b0f14 60%);
+      background-attachment: fixed;
+      color: var(--text);
+      scrollbar-color: var(--text) var(--bg)
+    }
+    .container {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 16px;
+    }
+    .card {
+      width: 100%;
+      max-width: 1100px;
+      background:var(--panel);
+      border: 0px;
+      border-radius: var(--radius);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+      padding: 24px;
+    }
+    .header-controls {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .header-controls h1 {
+      margin: 0;
+      font-size: clamp(22px, 3.2vw, 34px);
+    }
+    .btn {
+      appearance:none; border:1px solid var(--border); color:var(--text);
+      background:#162131; padding:10px 14px; border-radius:10px; cursor:pointer;
+    }
+    .btn:hover { border-color: var(--accent); }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 12px;
+    }
+    .field { display:flex; flex-direction:column; gap:6px; }
+    label { font-size:14px; }
+    select {
+      width:100%; background:#0f1622; color:var(--text); border-radius:10px;
+      border:1px solid var(--border); padding:10px 12px;
+      color: var(--accent-2);
+    }
+    .score {
+      display:grid; gap:10px; grid-template-columns:1fr auto; align-items:center; margin-top:18px;
+      padding-top:14px; border-top:1px dashed var(--border);
+    }
+    .meter { position:relative; height:16px; border-radius:999px; background:#0f1622; border:0px; overflow:hidden; }
+    .bar { position:absolute; inset:0; width:0%; background:#2563eb }
+    .percent { font-size:clamp(28px,4vw,40px); font-weight:700; }
+    .detail { color:var(--muted); font-size:13px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="header-controls">
+        <a href="https://github.com/colinrizzman" style="text-decoration:none"><h1>Neural Romance v2</h1></a>
+        <div>
+          <button class="btn" id="minBtn" type="button">Min</button>
+          <button class="btn" id="maxBtn" type="button">Max</button>
+          <button class="btn" id="randBtn" type="button">Random</button>
+          <button class="btn" id="resetBtn" type="button">Reset</button>
+        </div>
+      </div>
+
+      <form id="survey" class="grid" autocomplete="off"></form>
+
+      <div class="score">
+        <div>
+          <div class="meter" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <div class="bar" id="bar"></div>
+          </div>
+          <div class="detail" id="explain">Answer some questions to get your percentage.</div>
+        </div>
+        <div class="percent" id="percent">0%</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+<weights>
+  
+    function relu(x){return x > 0 ? x : 0;}
+    function selu(x){return 1.0507009873554805 * (x > 0 ? x : 1.6732632423543772 * (Math.expm1(x)));}
+    function gelu(x)
+    {
+      const c = Math.sqrt(2 / Math.PI);
+      const x3 = x * x * x;
+      return 0.5 * x * (1 + Math.tanh(c * (x + 0.044715 * x3)));
+    }
+    function dense_rowbias(src, w, inDim, outDim, useactivation = true)
+    {
+      const dst = new Float32Array(outDim);
+      const stride = inDim + 1;
+      for(let i = 0; i < outDim; i++)
+      {
+        const base = i * stride;
+        let s = w[base + inDim];
+        for(let k = 0; k < inDim; k++){s += w[base + k] * src[k];}
+        dst[i] = useactivation ? <activation>(s) : s;
+      }
+      return dst;
+    }
+    function forward(x)
+    {
+      const h0 = dense_rowbias(x,  L0, 26, <l1>, true);
+      const h1 = dense_rowbias(h0, L1, <l1>, <l1>, true);
+      const h2 = dense_rowbias(h1, L2, <l1>, <l1>, true);
+      const h3 = dense_rowbias(h2, L3, <l1>, <l1>, true);
+      const h4 = dense_rowbias(h3, L4, <l1>, <l1>, true);
+      const h5 = dense_rowbias(h4, L5, <l1>, <l1>, true);
+      const h6 = dense_rowbias(h5, L6, <l1>, <l2>, true);
+      return     dense_rowbias(h6, L7, <l2>, 1,  false)[0];
+    }
+
+    const TRAITS = ["obese/fat","curious","empathetic","ambitious","depressive","creative","intellectual","spiritual","traditional","loyal","dependable","emotional","nurturing","affectionate","possessive","dominant","open minded","defiant","independent","trustworthy","social","humorous","risk-taking","adventurous","quirky","crazy"];
+    const SCALE_LABELS = {0:"Not me at all",1:"Very untrue of me",2:"Mostly untrue of me",3:"Somewhat untrue of me",4:"Slightly untrue of me",5:"Slightly true of me",6:"Somewhat true of me",7:"Mostly true of me",8:"Very true of me",9:"Absolutely me"};
+
+    const form=document.getElementById('survey');
+    TRAITS.forEach((trait,idx)=>{
+      const field=document.createElement('div'); field.className='field';
+      const label=document.createElement('label'); label.textContent=trait.charAt(0).toUpperCase()+trait.slice(1);
+      const select=document.createElement('select'); select.name=trait;
+      select.innerHTML=Array.from({length:10},(_,v)=>`<option value="${v}" ${v===4?'selected':''}>${SCALE_LABELS[v]}</option>`).join('');
+      select.addEventListener('change',updateScore);
+      field.append(label,select); form.append(field);
+    });
+
+    document.getElementById('resetBtn').addEventListener('click',()=>{form.querySelectorAll('select').forEach(s=>s.value='4');updateScore();});
+    document.getElementById('minBtn').addEventListener('click',()=>{form.querySelectorAll('select').forEach(s=>s.value='0');updateScore();});
+    document.getElementById('maxBtn').addEventListener('click',()=>{form.querySelectorAll('select').forEach(s=>s.value='9');updateScore();});
+    document.getElementById('randBtn').addEventListener('click', () => {form.querySelectorAll('select').forEach(s=>s.value=Math.round(Math.random()*9));updateScore();});
+
+    function updateScore()
+    {
+      const arr = Array.from(form.querySelectorAll('select')).map(s => Number(s.value) / 9);
+      const o = forward(arr);
+      const pct = Math.max(0, Math.min(1, Number(o))) * 100;
+      const pctRounded = pct.toFixed(0);
+      document.getElementById("bar").style.width = pctRounded + "%";
+      document.getElementById("percent").textContent = pctRounded + "%";
+      document.getElementById("explain").textContent = "Your likelihood of finding love";
+    }
+
+    updateScore();
+  </script>
+</body>
+</html>
